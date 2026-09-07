@@ -4,6 +4,13 @@
 
 **Omablet** is a touch-first control panel for Omarchy tablets. It provides rotation and auto-rotate controls, access to **Omaqwerty** and **Omaglide**, and a lock-screen action.
 
+## Included companions
+
+- [Omaqwerty](https://github.com/frostmute/omarchy-omaqwerty) — docked touch keyboard
+- [Omaglide](https://github.com/frostmute/omarchy-omaglide) — touch trackpad and virtual pointer
+
+Both companions are optional and can be installed independently.
+
 ## Install
 
 ```sh
