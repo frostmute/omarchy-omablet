@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.frostmute.tablet-mode",
+  "name": "Omablet",
+  "version": "0.1.0",
+  "author": "Jonathan J Wagner",
+  "license": "MIT",
+  "homepage": "https://github.com/frostmute/omarchy-omablet",
+  "repository": "https://github.com/frostmute/omarchy-omablet",
+  "description": "Omablet: touch-first tablet controls for rotation, Omaqwerty, Omaglide, and lock-screen access.",
+  "kinds": ["panel", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omablet",
+    "description": "Open Omablet tablet controls",
+    "category": "Hardware",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
