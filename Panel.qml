@@ -8,12 +8,14 @@ import qs.Ui
 Item {
     id: root
     property bool opened: false
-    readonly property string backend: String(Qt.resolvedUrl("tablet-mode")).replace("file://", "")
+    readonly property string backend: decodeURIComponent(Qt.resolvedUrl("tablet-mode").toString()).replace(/^file:\/\//, "")
 
     function open(payloadJson) { opened = true }
     function close() { opened = false }
     function toggle() { opened = !opened }
     function run(action) {
+        if (actionProcess.running)
+            actionProcess.running = false
         if (action === "keyboard")
             actionProcess.command = ["omarchy-shell", "shell", "toggle", "io.github.frostmute.tablet-keyboard"]
         else if (action === "trackpad")
@@ -21,15 +23,15 @@ Item {
         else if (action === "system-lock")
             actionProcess.command = ["omarchy", "system", "lock"]
         else
-            actionProcess.command = [backend, action]
+            actionProcess.command = ["bash", backend, action]
         actionProcess.running = true
     }
 
     Process { id: actionProcess }
     Process {
         id: rotationWatcher
-        command: [root.backend, "watch"]
-        Component.onCompleted: running = true
+        command: ["bash", root.backend, "watch"]
+        running: true
     }
 
     PanelWindow {

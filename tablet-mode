@@ -8,7 +8,7 @@ mkdir -p "$state_dir"
 
 monitor_info() {
   hyprctl monitors -j | jq -r '
-    ([.[] | select(.name | test("^eDP"))] | .[0])
+    ([.[] | select(.name | test("^eDP|^DSI"))] | .[0])
     // ([.[] | select(.focused)] | .[0])
     // .[0]
     | "\(.name) \(.scale)"'
@@ -21,7 +21,37 @@ apply_rotation() {
     echo "No monitor found" >&2
     exit 1
   }
-  hyprctl keyword monitor "$output,preferred,auto,$scale,transform,$transform"
+  scale="${scale:-1}"
+  [[ "$scale" =~ ^[0-9]+([.][0-9]+)?$ ]] || scale=1
+
+  if [[ ! $output =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Refusing unsafe monitor name: $output" >&2
+    exit 1
+  fi
+
+  # In Hyprland 0.56+ with Lua config, 'hyprctl keyword' does not work and returns:
+  # "keyword can't work with non-legacy parsers. Use eval."
+  # Use 'hyprctl eval' to update monitor transform and sync touch/tablet input.
+  local res
+  res=$(hyprctl eval "
+    hl.monitor({ output = \"$output\", mode = \"preferred\", position = \"auto\", scale = $scale, transform = $transform })
+    hl.config({
+      input = {
+        touchdevice = { transform = $transform, output = \"$output\" },
+        tablet = { transform = $transform, output = \"$output\" }
+      }
+    })
+    if hl.exec_scheduled_prop_refresh_immediately then
+      hl.exec_scheduled_prop_refresh_immediately()
+    end
+  " 2>&1 || true)
+
+  # Fallback for legacy hyprland.conf configurations
+  if [[ "$res" != "ok" ]]; then
+    hyprctl keyword monitor "$output,preferred,auto,$scale,transform,$transform" || true
+    hyprctl keyword input:touchdevice:transform "$transform" || true
+    hyprctl keyword input:tablet:transform "$transform" || true
+  fi
 }
 
 orientation() {
@@ -34,16 +64,48 @@ orientation() {
   esac
 }
 
+current_orientation() {
+  local val
+  val=$(busctl get-property --system net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy AccelerometerOrientation 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  if [[ -n "$val" && "$val" != "undefined" ]]; then
+    local transform
+    if transform=$(orientation "$val"); then
+      apply_rotation "$transform"
+    fi
+  fi
+  return 0
+}
+
 watch() {
   # One watcher per user session, even if the shell reloads this plugin.
   exec 9>"$state_dir/watcher.lock"
   flock -n 9 || exit 0
+
+  # Apply initial orientation if unlocked
+  if [[ ! -e "$lock_file" ]]; then
+    current_orientation || true
+  fi
+
+  local monitor_cmd=(monitor-sensor)
+  if command -v stdbuf >/dev/null 2>&1; then
+    monitor_cmd=(stdbuf -oL monitor-sensor)
+  fi
+
   while :; do
-    monitor-sensor 2>/dev/null | while IFS= read -r line; do
+    "${monitor_cmd[@]}" 2>/dev/null | while IFS= read -r line; do
       case "$line" in
         *"Accelerometer orientation changed: "*)
           [[ ! -e "$lock_file" ]] || continue
           value=${line##*: }
+          value="${value//[[:space:]]/}"
+          transform=$(orientation "$value") || continue
+          apply_rotation "$transform" || true
+          ;;
+        *"Has accelerometer (orientation: "*)
+          [[ ! -e "$lock_file" ]] || continue
+          value=${line#*orientation: }
+          value=${value%%[,)]*}
+          value="${value//[[:space:]]/}"
           transform=$(orientation "$value") || continue
           apply_rotation "$transform" || true
           ;;
@@ -55,7 +117,10 @@ watch() {
 
 case "${1:-}" in
   watch) watch ;;
-  auto) rm -f "$lock_file" ;;
+  auto)
+    rm -f "$lock_file"
+    current_orientation || true
+    ;;
   lock) : > "$lock_file" ;;
   normal) : > "$lock_file"; apply_rotation 0 ;;
   right) : > "$lock_file"; apply_rotation 1 ;;
