@@ -29,6 +29,15 @@ apply_rotation() {
     exit 1
   fi
 
+  # Suspend hyprmoncfgd while rotated to prevent it from reverting the transform to landscape
+  if command -v hyprmoncfg >/dev/null 2>&1; then
+    if [[ "$transform" == "0" ]]; then
+      hyprmoncfg manage >/dev/null 2>&1 || true
+    else
+      hyprmoncfg unmanage >/dev/null 2>&1 || true
+    fi
+  fi
+
   # In Hyprland 0.56+ with Lua config, 'hyprctl keyword' does not work and returns:
   # "keyword can't work with non-legacy parsers. Use eval."
   # Use 'hyprctl eval' to update monitor transform and sync touch/tablet input.
@@ -37,8 +46,8 @@ apply_rotation() {
     hl.monitor({ output = \"$output\", mode = \"preferred\", position = \"auto\", scale = $scale, transform = $transform })
     hl.config({
       input = {
-        touchdevice = { transform = $transform, output = \"$output\" },
-        tablet = { transform = $transform, output = \"$output\" }
+        touchdevice = { output = \"$output\" },
+        tablet = { output = \"$output\" }
       }
     })
     if hl.exec_scheduled_prop_refresh_immediately then
