@@ -16,17 +16,17 @@ monitor_info() {
 
 apply_rotation() {
   local transform="$1" output scale
-  read -r output scale < <(monitor_info)
+  read -r output scale < <(monitor_info) || true
   [[ -n ${output:-} && "$output" != "null" ]] || {
     echo "No monitor found" >&2
-    exit 1
+    return 1
   }
   scale="${scale:-1}"
   [[ "$scale" =~ ^[0-9]+([.][0-9]+)?$ ]] || scale=1
 
   if [[ ! $output =~ ^[A-Za-z0-9._-]+$ ]]; then
     echo "Refusing unsafe monitor name: $output" >&2
-    exit 1
+    return 1
   fi
 
   # Suspend hyprmoncfgd while rotated to prevent it from reverting the transform to landscape
@@ -46,8 +46,8 @@ apply_rotation() {
     hl.monitor({ output = \"$output\", mode = \"preferred\", position = \"auto\", scale = $scale, transform = $transform })
     hl.config({
       input = {
-        touchdevice = { output = \"$output\" },
-        tablet = { output = \"$output\" }
+        touchdevice = { output = \"$output\", transform = $transform },
+        tablet = { output = \"$output\", transform = $transform }
       }
     })
     if hl.exec_scheduled_prop_refresh_immediately then
@@ -58,7 +58,9 @@ apply_rotation() {
   # Fallback for legacy hyprland.conf configurations
   if [[ "$res" != "ok" ]]; then
     hyprctl keyword monitor "$output,preferred,auto,$scale,transform,$transform" || true
+    hyprctl keyword input:touchdevice:output "$output" || true
     hyprctl keyword input:touchdevice:transform "$transform" || true
+    hyprctl keyword input:tablet:output "$output" || true
     hyprctl keyword input:tablet:transform "$transform" || true
   fi
 }
@@ -66,9 +68,9 @@ apply_rotation() {
 orientation() {
   case "$1" in
     normal) echo 0 ;;
-    right-up) echo 1 ;;
+    right-up) echo 3 ;;
     bottom-up) echo 2 ;;
-    left-up) echo 3 ;;
+    left-up) echo 1 ;;
     *) return 1 ;;
   esac
 }
@@ -95,11 +97,18 @@ watch() {
     current_orientation || true
   fi
 
+  if ! command -v monitor-sensor >/dev/null 2>&1; then
+    echo "monitor-sensor not found; install iio-sensor-proxy for auto-rotate" >&2
+    exit 0
+  fi
+
   local monitor_cmd=(monitor-sensor)
   if command -v stdbuf >/dev/null 2>&1; then
     monitor_cmd=(stdbuf -oL monitor-sensor)
   fi
 
+  # monitor-sensor exits when iio-sensor-proxy restarts (or on resume); restart it.
+  # '|| true' keeps set -e/pipefail from ending the watcher when that happens.
   while :; do
     "${monitor_cmd[@]}" 2>/dev/null | while IFS= read -r line; do
       case "$line" in
@@ -119,7 +128,7 @@ watch() {
           apply_rotation "$transform" || true
           ;;
       esac
-    done
+    done || true
     sleep 1
   done
 }
