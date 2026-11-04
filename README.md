@@ -22,12 +22,13 @@
 
 ## Prerequisites
 
-For automatic rotation based on hardware accelerometer sensors, ensure `iio-sensor-proxy` is installed and running:
+For automatic rotation based on hardware accelerometer sensors, ensure `iio-sensor-proxy` is installed:
 
 ```sh
 omarchy pkg add iio-sensor-proxy
-systemctl --user enable --now iio-sensor-proxy
 ```
+
+It runs as a system service that starts on demand when sensor data is requested, so there is nothing to enable.
 
 Display and scale detection utilizes `jq`.
 
